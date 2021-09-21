@@ -1,11 +1,10 @@
-
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <endian.h>
+#include <fcntl.h>
 
 #define N		 4096	/* size of ring buffer */
 #define F		   18	/* upper limit for match_length */
@@ -88,55 +87,38 @@ int Decode(unsigned char *ucInput, unsigned int inLen, unsigned char *ucOutput)	
 }
 
 
-int main(int argc, char**argv) {
-           unsigned char *addr;
-           int fd;
-           struct stat sb;
-           off_t offset, pa_offset;
-           size_t length;
-           ssize_t s;
-           char* filename = "config.dat";
+int main(int argc,char **argv,char **env){
+	if(argc<3){
+		puts("[+] Usage: ./decode_apmib_config INPUT_FILE OUTPUT_FILE");
+		exit(0);
+	}
 
-           COMPRESS_MIB_HEADER_T * header;
+	struct stat sb;
+	char *read_buf = (char *)calloc(1,0x100000);
+	char *expFile = (char *)calloc(1,0x100000);
 
-           if (argc>2) {
-             printf("Wrong number of parameters!");
-             exit(1);
-           }
-           if (argc==2) {
-             filename=argv[1];
-           }
-           
-           fd = open(filename, O_RDONLY);
-           if (fd == -1)
-               handle_error("open");
+	int infile = open(argv[1],O_RDONLY);
+	int outfile = open(argv[2],O_CREAT|O_RDWR,S_IRWXU);
+	if(infile == -1 || outfile == -1){
+		fprintf(stderr,"read file error!");
+		exit(-1);
+	}
+		
+	fstat(infile,&sb);
+	read(infile,read_buf,sb.st_size);
 
-           if (fstat(fd, &sb) == -1)           /* To obtain file size */
-               handle_error("fstat");
+	//printf("Input file size: %ld\n",sb.st_size);
+	Decode((char *)((char *)read_buf+0xc),sb.st_size,expFile);
+	
+	write(outfile,expFile,0x4000);
 
+	char *buf = malloc(0x200);
+	sprintf(buf,"TMP=`strings %s | head -n +4 | tail -n1`;python -c \"t='$TMP'.replace('@','');print(t);\"",argv[2]);
+	system(buf);
 
-           addr = (unsigned char *)mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-
-           header = (COMPRESS_MIB_HEADER_T*)addr;
-
-           
-           //printf("%u\n", be16toh(header->compRate));
-           //printf("%u\n", be32toh(header->compLen));
-           //printf("%u\n", sb.st_size);
-           unsigned char *expFile=NULL;
-           expFile=(unsigned char *)calloc(1,be16toh(header->compRate)*be32toh(header->compLen));
-
-
-           
-           unsigned int expandLen = Decode(addr+sizeof(COMPRESS_MIB_HEADER_T), be32toh(header->compLen), expFile);
-
-           //printf("%u\n", expandLen);
-           //printf("%.*s\n",100, expFile);
-           //fwrite(expFile, 1, expandLen, stdout);
-
-		   printf("[USERNAME]:%s\r\n", &expFile[0xDB]);
-		   printf("[PASSWD]:%s\r\n", &expFile[0x100]);
-           //flash_read_raw_mib("config.dat");
-
-		   return 0;
+	free(read_buf);	
+	free(expFile);
+	free(buf);
+	
+	return 0;
 }
