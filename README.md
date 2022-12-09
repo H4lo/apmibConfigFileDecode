@@ -7,6 +7,7 @@ For Realtek SDK's config.dat file decode
 
 1. TOTOLINK A3002R
 2. DLink DIR-823G
+3. And other...
 
 ## Usage
 
